@@ -47,15 +47,6 @@ namespace Curso_Basico.Helpers
         }
 
         /// <summary>
-        /// Lee un archivo para conocer el MIME y devuelve en consola el MIME o mensaje de excepción.
-        /// </summary>
-        /// <param name="filePath"></param>
-        internal void LeerMIME(string filePath)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
         /// Comprueba el tamaño del archivo y devuelve en consola el tamaño o mensaje de excepción.
         /// </summary>
         /// <param name="rutaArchivo"></param>
@@ -88,6 +79,15 @@ namespace Curso_Basico.Helpers
 
             // 4. Mostrar el resultado
             Console.WriteLine(resultado);
+        }
+
+        /// <summary>
+        /// Lee un archivo para conocer el MIME y devuelve en consola el MIME o mensaje de excepción.
+        /// </summary>
+        /// <param name="filePath"></param>
+        internal void LeerMIME(string filePath)
+        {
+            throw new NotImplementedException();
         }
     }
 }
