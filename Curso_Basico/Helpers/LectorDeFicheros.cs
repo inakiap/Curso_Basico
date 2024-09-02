@@ -1,19 +1,27 @@
 ﻿using System;
 using System.IO;
-using System.Net.Mime;
-using System.Collections.Generic;
+using MimeDetective;
+using FileSignatures;
+using TwentyDevs.MimeTypeDetective;
+using System.Collections.Immutable;
 using System.Globalization;
+
 
 
 namespace Curso_Basico.Helpers
 {
     public class LectorFicheros
     {
-        private const string EXCEPCION_FICHERO_NO_EXISTE = "No existe fichero y no se puede leer. Obvio!";
+        private const string EXCEPCION_FICHERO_NO_EXISTE = "No existe fichero.";
 
         private bool _ExisteFichero(string rutaArchivo)
         {
             return File.Exists(rutaArchivo);
+        }
+
+        private bool _ExisteDirectorio(string rutaArchivo)
+        {
+            return Directory.Exists(rutaArchivo);
         }
 
         /// <summary>
@@ -89,17 +97,17 @@ namespace Curso_Basico.Helpers
 
             //Tener en cuenta el tipo de operación de bus entrada/salida, de memoria
 
-             resultado = (existe) ? (fileInfo == null) ? EXCEPCION_FICHERO_SIN_TAMAÑO : $"El tamaño del archivo \"{rutaArchivo}\" es {resultado}." : EXCEPCION_FICHERO_NO_EXISTE;
+             resultado = (existe) ? (fileInfo == null) ? EXCEPCION_FICHERO_SIN_TAMAÑO : $"El tamaño  es {resultado}." : EXCEPCION_FICHERO_NO_EXISTE;
 
             // 4. Mostrar el resultado
             Console.WriteLine(resultado);
         }
 
         //Mejor versión, optimizada, no es exponencial
-        public string _FormatearTamaño(ulong tamaño, uint decimales = 2)
+        private string _FormatearTamaño(ulong tamaño, uint decimales = 2)
         {
             //Variables               
-            string[] S_SUFIJOS = { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" }; //Esto se podría modificar, debería ser inmutable.
+            ImmutableArray<string> S_SUFIJOS = ImmutableArray.Create( "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" ); //Esto se podría modificar, debería ser inmutable.
             uint indice = 0;
             decimal tamaño_tmp = tamaño;
 
@@ -115,12 +123,14 @@ namespace Curso_Basico.Helpers
                 }
             }
 
+            S_SUFIJOS = S_SUFIJOS.Remove("byte");
+
             //Devuelvo
-            return string.Format(CultureInfo.InvariantCulture, "{0:n" + decimales + "} {1}", tamaño_tmp, S_SUFIJOS[indice]);
+            return string.Format(CultureInfo.InvariantCulture, "{0:n" + decimales + "} {1}", tamaño_tmp, S_SUFIJOS.ItemRef((int)indice));
         }
 
         //Solución buena pero que al contener un while en realidad es exponencial
-        public string _FormatearTamaño2(ulong tamaño, uint decimales = 2)
+        private string _FormatearTamaño2(ulong tamaño, uint decimales = 2)
         {
             //Variables
             string[] S_SUFIJOS = { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
@@ -136,48 +146,59 @@ namespace Curso_Basico.Helpers
                     indice++;
                 }
             }
+
             //Devuelvo
             return string.Format(CultureInfo.InvariantCulture, "{0:n" + decimales + "} {1}", tamaño_tmp, S_SUFIJOS[indice]);
         }
 
-        //mi intento sin acabar...
-        private string FormatearTamaño(ulong miTamaño)
+        private byte[] _ObtenerContenidoEnBytes(string rutaArchivo)
         {
-            string resultado = miTamaño.ToString() + " bytes.";
-            //TODO pasar el resultado a la medida más adecuada, si son 10000 pues darlo en MB, etc... Según el número de bytes que obtenga como tamaño del archivo escribir el tamaño en la unidad más adecuada: Bytes, KBytes, MBytes, etc.
-            //¿Cómo hacer el cálculo para obtener la unidad más adecuada según el tamaño?
+            byte[] buffer = null;
 
-            if (miTamaño >= 1024)
+            try
             {
-                miTamaño /= 1024;
-            
-                if (miTamaño < 1024 )
+                using (FileStream fs = new FileStream(rutaArchivo, FileMode.Open, FileAccess.Read))
                 {
-                    resultado = miTamaño.ToString() + " KBtytes.";
+                    // Leer el contenido del archivo
+                    buffer = new byte[fs.Length];
+                    fs.Read(buffer, 0, buffer.Length);
                 }
             }
+            catch (Exception)
+            {
 
-            //Si el número es inferior a 1024 escribes en Bytes
-            //Si el número es superior a 1024 dividir entre 1024 -> KB
-            //Si el resultado es inferior a 1024 escribir MB
-            //Si el resultado es superior a 1024 dividir entre 1024 -> GB
-            //y sucesivamente hasta el máximo
-            //Devuelve un string con número redondeado a la unidad correspondiente con dos decimales
-            return resultado;
+            }
+            return buffer;
         }
 
-        //TODO
+        private Stream _ObtenerContenidoEnStream(string rutaArchivo)
+        {
+            Stream stream= null;
+
+            try
+            {
+                stream = new FileStream(rutaArchivo, FileMode.Open, FileAccess.Read);
+                
+            }
+            catch (Exception)
+            {
+
+            }
+            return stream;
+        }
+
         /// <summary>
-        /// Lee un archivo para conocer su MIME type y devuelve en consola el MIME o mensaje de excepción.
+        /// Lee un archivo para conocer su MIME type y devuelve en consola el MIME.
         /// </summary>
         /// <param name="rutaArchivo"></param>
-        internal void LeerMIME(string rutaArchivo)
+        public void LeerMIME(string rutaArchivo, int modo = 0)
         {
-            // Constantes
-            const string EXCEPCION_FICHERO_SIN_MIME = "El fichero existe pero su tipo MIME es desconocido.";
+            const string EXCEPCION_NO_HAY_CONTENIDO = "No se ha podido leer el contenido del fichero.";
+            const string EXCEPCION_NO_SE_RECONOCE_EL_TIPO = "MIME desconocido.";
 
             // 0. Inicializar variables
             string resultado = null;
+            ImmutableArray<byte> contenido;
 
             // 1. Comprobar si el fichero existe
             bool existe = _ExisteFichero(rutaArchivo);
@@ -185,18 +206,183 @@ namespace Curso_Basico.Helpers
             // 2. Obtener la información
             if (existe)
             {
-                //resultado = _ObtenerMIMEDelContenido(rutaArchivo);
-                //if (resultado == null)
-                //{
-                //    resultado = _ObtenerMIMEDeLaExtension(rutaArchivo);
-                //}
+                // 3. Comprobar si se puede leer el contenido del archivo
+                contenido = _ObtenerContenidoEnBytes(rutaArchivo).ToImmutableArray();
+
+                if (contenido != null)
+                {
+                    ContentInspector Inspector = ObtenerInspector(modo);
+
+                    var definicion = Inspector.Inspect(contenido);
+                    if (definicion.Length > 0)
+                    {
+                        resultado = definicion.ItemRef(0).Definition.File.MimeType;
+                    }
+                }
+
             }
 
             // 3. Formatear la salida
-            resultado = (existe) ? (resultado == null) ? EXCEPCION_FICHERO_SIN_MIME : $"El tipo de MIME del archivo \"{rutaArchivo}\" es {resultado}." : EXCEPCION_FICHERO_NO_EXISTE;
+            string metodo = "Default";
+            switch (modo)
+            {
+                case 1:
+                    metodo = "Condensed";
+                    break;
+                case 2:
+                    metodo = "Exhaustive";
+                    break;
+                default:
+                    break;
+            }
+            resultado = (existe) ? (contenido == null) ? EXCEPCION_NO_HAY_CONTENIDO : (resultado == null) ? EXCEPCION_NO_SE_RECONOCE_EL_TIPO :  $"-- {metodo}: {resultado}" : EXCEPCION_FICHERO_NO_EXISTE;
 
             // 4. Mostrar el resultado
             Console.WriteLine(resultado);
         }
+
+        /// <summary>
+        /// Lee un archivo para conocer su MIME type y devuelve en consola el MIME.
+        /// </summary>
+        /// <param name="rutaArchivo"></param>
+        public void LeerMIME_FileSignatures(string rutaArchivo)
+        {
+            const string EXCEPCION_NO_HAY_CONTENIDO = "No se ha podido leer el contenido del fichero.";
+            const string EXCEPCION_NO_SE_RECONOCE_EL_TIPO = "MIME desconocido.";
+
+            // 0. Inicializar variables
+            string resultado = null;
+            Stream contenido = null;
+
+            // 1. Comprobar si el fichero existe
+            bool existe = _ExisteFichero(rutaArchivo);
+
+            // 2. Obtener la información
+            if (existe)
+            {
+                // 3. Comprobar si se puede leer el contenido del archivo
+                using ( contenido = _ObtenerContenidoEnStream(rutaArchivo))
+                {
+                    if (contenido != null)
+                    {
+                        var inspector = new FileFormatInspector();
+                        var formato = inspector.DetermineFileFormat(contenido);
+                        if (formato != null)
+                        {
+                            resultado = formato.MediaType;
+                        }
+                    }
+                }
+            }
+
+            // 3. Formatear la salida
+            resultado = (existe) ? (contenido == null) ? EXCEPCION_NO_HAY_CONTENIDO : (resultado == null) ? EXCEPCION_NO_SE_RECONOCE_EL_TIPO : $"-- FileSignature: {resultado}" : EXCEPCION_FICHERO_NO_EXISTE;
+
+            // 4. Mostrar el resultado
+            Console.WriteLine(resultado);
+        }
+
+        /// <summary>
+        /// Lee un archivo para conocer su MIME type y devuelve en consola el MIME.
+        /// </summary>
+        /// <param name="rutaArchivo"></param>
+        public void LeerMIME_TwentyDevs(string rutaArchivo)
+        {
+            const string EXCEPCION_NO_HAY_CONTENIDO = "No se ha podido leer el contenido del fichero.";
+            const string EXCEPCION_NO_SE_RECONOCE_EL_TIPO = "MIME desconocido.";
+
+            // 0. Inicializar variables
+            string resultado = null;
+            Stream contenido = null;
+
+            // 1. Comprobar si el fichero existe
+            bool existe = _ExisteFichero(rutaArchivo);
+
+            // 2. Obtener la información
+            if (existe)
+            {
+                // 3. Comprobar si se puede leer el contenido del archivo
+                using (contenido = _ObtenerContenidoEnStream(rutaArchivo))
+                {
+                    if (contenido != null)
+                    {
+                        MimeTypeInfo mimeInfo = MimeTypeDetection.GetMimeType(contenido);
+                        if (mimeInfo != null)
+                        {
+                            resultado = mimeInfo.MimeType;
+                        }
+                    }
+                }
+            }
+
+            // 3. Formatear la salida
+            resultado = (existe) ? (contenido == null) ? EXCEPCION_NO_HAY_CONTENIDO : (resultado == null) ? EXCEPCION_NO_SE_RECONOCE_EL_TIPO : $"-- TwentyDevs: {resultado}" : EXCEPCION_FICHERO_NO_EXISTE;
+
+            // 4. Mostrar el resultado
+            Console.WriteLine(resultado);
+        }
+
+        private static ContentInspector ObtenerInspector(int modo)
+        {
+            ContentInspector inspector = null;
+            switch (modo)
+            {
+                case 1: //Condensed
+                    inspector = new ContentInspectorBuilder()
+                    {
+                        Definitions = new MimeDetective.Definitions.CondensedBuilder()
+                        {
+                            UsageType = MimeDetective.Definitions.Licensing.UsageType.PersonalNonCommercial
+                        }.Build()
+                    }.Build();
+                    break;
+                case 2:
+                    inspector = new ContentInspectorBuilder()
+                    {
+                        Definitions = new MimeDetective.Definitions.ExhaustiveBuilder()
+                        {
+                            UsageType = MimeDetective.Definitions.Licensing.UsageType.PersonalNonCommercial
+                        }.Build()
+                    }.Build();
+                    break;
+                default: //Default
+                    inspector = new ContentInspectorBuilder()
+                    {
+                        Definitions = MimeDetective.Definitions.Default.All()
+                    }.Build();
+                    break;
+            }
+            return inspector;
+        }
+
+        /// <summary>
+        /// Busca en una ruta dada y devuelve una lista de rutas de todos los archivos que hay, si el directorio no existe devuelve null, si no encuentra nada devuelve una matriz vacia.
+        /// </summary>
+        /// <param name="ruta"></param>
+        /// <returns></returns>
+        public string[] LeerDirectorio(string ruta)
+        {
+            // 0. Inicializar variables
+            string[] resultado = null;
+
+            // 1. Comprobar si el directorio existe
+            bool existe = _ExisteDirectorio(ruta);
+
+            // 2. Si existe obtener los archivos
+            if (existe)
+            {
+                try
+                {
+                    resultado = Directory.GetFiles(ruta, "*.*", SearchOption.AllDirectories);
+                }
+                catch (Exception)
+                {
+                }
+            }
+            // 3. Formatear la salida
+            return resultado;
+        }
+
+
     }
 }
